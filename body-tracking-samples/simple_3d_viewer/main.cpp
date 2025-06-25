@@ -12,6 +12,8 @@
 #include <BodyTrackingHelpers.h>
 #include <Utilities.h>
 #include <Window3dWrapper.h>
+#include <lcm/lcm-cpp.hpp>
+#include "lcm/joint_lcm.hpp"
 
 void PrintUsage()
 {
@@ -203,6 +205,7 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
         Color lowConfidenceColor = color;
         lowConfidenceColor.a = 0.1f;
 
+        std::cout << "static_cast<int>(K4ABT_JOINT_COUNT): " << static_cast<int>(K4ABT_JOINT_COUNT) << std::endl;
         // Visualize joints
         for (int joint = 0; joint < static_cast<int>(K4ABT_JOINT_COUNT); joint++)
         {
