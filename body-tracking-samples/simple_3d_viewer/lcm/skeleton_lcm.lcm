@@ -1,0 +1,7 @@
+struct skeleton_lcm
+{
+  int32_t id;
+  int32_t confidence[32];
+  float joint_positions[32][3];
+  float joint_orientations[32][4];
+}

@@ -8,12 +8,16 @@
 #include <k4arecord/playback.h>
 #include <k4a/k4a.h>
 #include <k4abt.h>
+#include <eigen3/Eigen/Dense>
+#include <fstream>
 
 #include <BodyTrackingHelpers.h>
 #include <Utilities.h>
 #include <Window3dWrapper.h>
 #include <lcm/lcm-cpp.hpp>
-#include "lcm/joint_lcm.hpp"
+#include "lcm/skeleton_lcm.hpp"
+
+lcm::LCM skeleton_lcm_pub("udpm://239.255.76.67:7667?ttl=255");
 
 void PrintUsage()
 {
@@ -54,6 +58,48 @@ void PrintAppUsage()
     printf(" b: body visualization mode\n");
     printf(" k: 3d window layout\n");
     printf("\n");
+}
+
+const char* k4abt_joint_id_to_string(int joint) {
+  static const char* joint_names[] = {
+    "PELVIS",
+    "SPINE_NAVEL",
+    "SPINE_CHEST",
+    "NECK",
+    "CLAVICLE_LEFT",
+    "SHOULDER_LEFT",
+    "ELBOW_LEFT",
+    "WRIST_LEFT",
+    "HAND_LEFT",
+    "HANDTIP_LEFT",
+    "THUMB_LEFT",
+    "CLAVICLE_RIGHT",
+    "SHOULDER_RIGHT",
+    "ELBOW_RIGHT",
+    "WRIST_RIGHT",
+    "HAND_RIGHT",
+    "HANDTIP_RIGHT",
+    "THUMB_RIGHT",
+    "HIP_LEFT",
+    "KNEE_LEFT",
+    "ANKLE_LEFT",
+    "FOOT_LEFT",
+    "HIP_RIGHT",
+    "KNEE_RIGHT",
+    "ANKLE_RIGHT",
+    "FOOT_RIGHT",
+    "HEAD",
+    "NOSE",
+    "EYE_LEFT",
+    "EAR_LEFT",
+    "EYE_RIGHT",
+    "EAR_RIGHT"
+  };
+
+  if (joint >= 0 && joint < K4ABT_JOINT_COUNT)
+    return joint_names[joint];
+  else
+    return "UNKNOWN_JOINT";
 }
 
 // Global State and Key Process Function
@@ -165,6 +211,11 @@ bool ParseInputSettingsFromArg(int argc, char** argv, InputSettings& inputSettin
     return true;
 }
 
+Eigen::Matrix3f QuaternionToRotationMatrix(const k4a_quaternion_t& q) {
+  Eigen::Quaternionf quat(q.v[0], q.v[1], q.v[2], q.v[3]);  // w, x, y, z
+  return quat.normalized().toRotationMatrix();
+}
+
 void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int depthWidth, int depthHeight) {
 
     // Obtain original capture that generates the body tracking result
@@ -193,11 +244,27 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
     // Visualize the skeleton data
     window3d.CleanJointsAndBones();
     uint32_t numBodies = k4abt_frame_get_num_bodies(bodyFrame);
+
+    std::vector<Eigen::Vector3f> axes = {
+      { 1.0f, 0.0f, 0.0f },
+      { 0.0f, 1.0f, 0.0f },
+      { 0.0f, 0.0f, 1.0f }
+    };
+
+    auto now = std::chrono::system_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    std::cout << "Current time (microseconds since epoch): " << us << std::endl;
+
+    static std::ofstream skeleton_file("/home/s/skeleton.txt", std::ios::out);
+    skeleton_file << "Timestamp: " << us << "\n";
+
     for (uint32_t i = 0; i < numBodies; i++)
     {
+        skeleton_lcm skeletons;
         k4abt_body_t body;
         VERIFY(k4abt_frame_get_body_skeleton(bodyFrame, i, &body.skeleton), "Get skeleton from body frame failed!");
         body.id = k4abt_frame_get_body_id(bodyFrame, i);
+        skeletons.id = body.id;
 
         // Assign the correct color based on the body id
         Color color = g_bodyColors[body.id % g_bodyColors.size()];
@@ -205,10 +272,29 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
         Color lowConfidenceColor = color;
         lowConfidenceColor.a = 0.1f;
 
-        std::cout << "static_cast<int>(K4ABT_JOINT_COUNT): " << static_cast<int>(K4ABT_JOINT_COUNT) << std::endl;
         // Visualize joints
         for (int joint = 0; joint < static_cast<int>(K4ABT_JOINT_COUNT); joint++)
         {
+          // std::cout << "Joint: " << joint << ", Confidence: " << body.skeleton.joints[joint].confidence_level << std::endl;
+          const k4a_float3_t& jointPosition = body.skeleton.joints[joint].position;
+          const k4a_quaternion_t& jointOrientation = body.skeleton.joints[joint].orientation;
+          skeletons.confidence[joint] = body.skeleton.joints[joint].confidence_level;
+          skeletons.joint_positions[joint][0] = jointPosition.v[0];
+          skeletons.joint_positions[joint][1] = jointPosition.v[1];
+          skeletons.joint_positions[joint][2] = jointPosition.v[2];
+          skeletons.joint_orientations[joint][0] = jointOrientation.v[0];
+          skeletons.joint_orientations[joint][1] = jointOrientation.v[1];
+          skeletons.joint_orientations[joint][2] = jointOrientation.v[2];
+          skeletons.joint_orientations[joint][3] = jointOrientation.v[3];
+          skeleton_file << k4abt_joint_id_to_string(joint) << ": "
+                        << jointPosition.v[0] << ", "
+                        << jointPosition.v[1] << ", "
+                        << jointPosition.v[2] << ", "
+                        << jointOrientation.v[0] << ", "
+                        << jointOrientation.v[1] << ", "
+                        << jointOrientation.v[2] << ", "
+                        << jointOrientation.v[3] << "\n";
+
             if (body.skeleton.joints[joint].confidence_level >= K4ABT_JOINT_CONFIDENCE_LOW)
             {
                 const k4a_float3_t& jointPosition = body.skeleton.joints[joint].position;
@@ -235,9 +321,48 @@ void VisualizeResult(k4abt_frame_t bodyFrame, Window3dWrapper& window3d, int dep
                 const k4a_float3_t& joint1Position = body.skeleton.joints[joint1].position;
                 const k4a_float3_t& joint2Position = body.skeleton.joints[joint2].position;
 
+
+
+
+                const k4a_quaternion_t& joint1Orientation = body.skeleton.joints[joint1].orientation;
+                const k4a_quaternion_t& joint2Orientation = body.skeleton.joints[joint2].orientation;
+                Eigen::Matrix3f R = QuaternionToRotationMatrix(joint1Orientation);
+
+                if (joint1 == K4ABT_JOINT_SHOULDER_RIGHT && joint2 == K4ABT_JOINT_ELBOW_RIGHT) {
+                  Eigen::Matrix3f R2 = QuaternionToRotationMatrix(joint2Orientation);
+                  Eigen::Matrix3f R_diff = R.transpose() * R2; // Calculate the relative rotation
+                  Eigen::Vector3f angles = R_diff.eulerAngles(2, 1, 0) * 180.0f / M_PI; // Get the Euler angles (yaw, pitch, roll)
+                  // std::cout << "Relative angle: " << angles.transpose() << std::endl;
+                }
+
+                if (joint1 == K4ABT_JOINT_ELBOW_RIGHT) {
+                  Eigen::Vector3f ypr = R.eulerAngles(2, 1, 0) * 180.0f / M_PI; // Convert to degrees
+                  // std::cout << "ELBOW angle: " << ypr.transpose() << std::endl;
+                } else if (joint1 == K4ABT_JOINT_SHOULDER_RIGHT) {
+                  Eigen::Vector3f ypr = R.eulerAngles(2, 1, 0) * 180.0f / M_PI; // Convert to degrees
+                  // std::cout << "SHOULDER angle: " << ypr.transpose() << std::endl;
+                } else {
+                  // continue;
+                }
+                Eigen::Vector3f origin(joint1Position.v[0], joint1Position.v[1], joint1Position.v[2]);
+
+                float axis_length = 80.0f; // Length of the axes
+
+                Eigen::Vector3f x_axis = R * axes[0] * axis_length + origin;
+                Eigen::Vector3f y_axis = R * axes[1] * axis_length + origin; // origin + axis_length * R.col(1);
+                Eigen::Vector3f z_axis = R * axes[2] * axis_length + origin; // origin + axis_length * R.col(2);
+
+                window3d.AddBone(joint1Position, { x_axis[0], x_axis[1], x_axis[2] }, { 1.f, 0.f, 0.f, 1.f });  // Red: X
+                window3d.AddBone(joint1Position, { y_axis[0], y_axis[1], y_axis[2] }, { 0.f, 1.f, 0.f, 1.f });  // Green: Y
+                window3d.AddBone(joint1Position, { z_axis[0], z_axis[1], z_axis[2] }, { 0.f, 0.f, 1.f, 1.f });  // Blue: Z
+
+
+                
+
                 window3d.AddBone(joint1Position, joint2Position, confidentBone ? color : lowConfidenceColor);
             }
         }
+      skeleton_lcm_pub.publish("skeletons", &skeletons);
     }
 
     k4a_capture_release(originalCapture);
@@ -362,6 +487,46 @@ void PlayFromDevice(InputSettings inputSettings)
         "Get depth camera calibration failed!");
     int depthWidth = sensorCalibration.depth_camera_calibration.resolution_width;
     int depthHeight = sensorCalibration.depth_camera_calibration.resolution_height;
+    // std::cout << "Depth Camera Resolution: " << depthWidth << " x " << depthHeight << std::endl;
+
+    // k4a_calibration_camera_t depth_calib = sensorCalibration.depth_camera_calibration;
+    // std::cout << "Kinect Depth Camera Intrinsic Parameters:" << std::endl;
+    // std::cout << "Resolution: " << depth_calib.resolution_width << " x " << depth_calib.resolution_height << std::endl;
+    // std::cout << "fx: " << depth_calib.intrinsics.parameters.param.fx << std::endl;
+    // std::cout << "fy: " << depth_calib.intrinsics.parameters.param.fy << std::endl;
+    // std::cout << "cx: " << depth_calib.intrinsics.parameters.param.cx << std::endl;
+    // std::cout << "cy: " << depth_calib.intrinsics.parameters.param.cy << std::endl;
+    // std::cout << "k1: " << depth_calib.intrinsics.parameters.param.k1 << std::endl;
+    // std::cout << "k2: " << depth_calib.intrinsics.parameters.param.k2 << std::endl;
+    // std::cout << "k3: " << depth_calib.intrinsics.parameters.param.k3 << std::endl;
+    // std::cout << "k4: " << depth_calib.intrinsics.parameters.param.k4 << std::endl;
+    // std::cout << "k5: " << depth_calib.intrinsics.parameters.param.k5 << std::endl;
+    // std::cout << "k6: " << depth_calib.intrinsics.parameters.param.k6 << std::endl;
+    // std::cout << "codx: " << depth_calib.intrinsics.parameters.param.codx << std::endl;
+    // std::cout << "cody: " << depth_calib.intrinsics.parameters.param.cody << std::endl;
+    // std::cout << "p2: " << depth_calib.intrinsics.parameters.param.p2 << std::endl;
+    // std::cout << "p1: " << depth_calib.intrinsics.parameters.param.p1 << std::endl;
+    // std::cout << "metric_radius: " << depth_calib.intrinsics.parameters.param.metric_radius << std::endl;
+
+    // k4a_calibration_camera_t rgb_calib = sensorCalibration.color_camera_calibration;
+    // std::cout << "Kinect RGB Camera Intrinsic Parameters:" << std::endl;
+    // std::cout << "Resolution: " << rgb_calib.resolution_width << " x " << rgb_calib.resolution_height << std::endl;
+    // std::cout << "fx: " << rgb_calib.intrinsics.parameters.param.fx << std::endl;
+    // std::cout << "fy: " << rgb_calib.intrinsics.parameters.param.fy << std::endl;
+    // std::cout << "cx: " << rgb_calib.intrinsics.parameters.param.cx << std::endl;
+    // std::cout << "cy: " << rgb_calib.intrinsics.parameters.param.cy << std::endl;
+    // std::cout << "k1: " << rgb_calib.intrinsics.parameters.param.k1 << std::endl;
+    // std::cout << "k2: " << rgb_calib.intrinsics.parameters.param.k2 << std::endl;
+    // std::cout << "k3: " << rgb_calib.intrinsics.parameters.param.k3 << std::endl;
+    // std::cout << "k4: " << rgb_calib.intrinsics.parameters.param.k4 << std::endl;
+    // std::cout << "k5: " << rgb_calib.intrinsics.parameters.param.k5 << std::endl;
+    // std::cout << "k6: " << rgb_calib.intrinsics.parameters.param.k6 << std::endl;
+    // std::cout << "codx: " << rgb_calib.intrinsics.parameters.param.codx << std::endl;
+    // std::cout << "cody: " << rgb_calib.intrinsics.parameters.param.cody << std::endl;
+    // std::cout << "p2: " << rgb_calib.intrinsics.parameters.param.p2 << std::endl;
+    // std::cout << "p1: " << rgb_calib.intrinsics.parameters.param.p1 << std::endl;
+    // std::cout << "metric_radius: " << rgb_calib.intrinsics.parameters.param.metric_radius << std::endl;
+    // std::cout << "fx: " << rgb_calib.intrinsics.parameters.v[0] << std::endl;
 
     // Create Body Tracker
     k4abt_tracker_t tracker = nullptr;
