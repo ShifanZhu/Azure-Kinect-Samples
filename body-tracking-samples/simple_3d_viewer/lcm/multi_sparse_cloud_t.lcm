@@ -1,0 +1,14 @@
+struct class_cloud_t
+{
+    int32_t class_id;     // gid
+    int32_t n;            // number of points = n / 3
+    float   xyz[n];   // packed (x,y,z) in depth camera frame, millimeters
+}
+
+struct multi_sparse_cloud_t
+{
+    int64_t utime;        // microseconds
+    string  frame_id;     // e.g., "depth"
+    int32_t num_classes;
+    class_cloud_t classes[num_classes];
+}
