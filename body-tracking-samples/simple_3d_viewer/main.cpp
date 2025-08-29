@@ -230,30 +230,29 @@ static std::unordered_map<int, cv::Scalar> makeGroupColorMap()
 
     // Example colors — change as you like:
     C[1]  = cv::Scalar(0, 165, 255);      // trunk: orange
-    C[2]  = cv::Scalar(0, 255, 255);      // head/neck: yellow
+    C[2]  = cv::Scalar(0, 255, 255);      // neck: yellow
     C[3]  = cv::Scalar(255, 0, 255);      // clavicle L: magenta
     C[4]  = cv::Scalar(255, 0, 128);      // upper arm L: purple-ish
     C[5]  = cv::Scalar(255, 0, 180);      // forearm L: pink-ish
 
     // (you commented-out some left-hand groups; they will fall back to gid 0)
 
-    C[7]  = cv::Scalar(255, 255, 0);        // L hip: green
-    C[8]  = cv::Scalar(60, 255, 60);      // L knee
-    C[9]  = cv::Scalar(100, 200, 100);    // L ankle
-    C[10] = cv::Scalar(120, 180, 120);    // L foot
+    C[6]  = cv::Scalar(255, 255, 0);        // L hip: green
+    C[7]  = cv::Scalar(60, 255, 60);      // L upper leg
+    C[8]  = cv::Scalar(100, 200, 100);    // L lower leg
+    C[9]  = cv::Scalar(120, 180, 120);    // L foot
 
-    C[11] = cv::Scalar(255, 255, 0);      // face lines: cyan? (actually yellow if BGR; adjust as needed)
-    // (if you want true cyan: cv::Scalar(255, 255, 0) is cyan in BGR)
+    C[10] = cv::Scalar(255, 255, 0);      // head: cyan?
 
-    C[12] = cv::Scalar(0, 0, 255);        // clavicle R: red
-    C[13] = cv::Scalar(0, 64, 255);       // upper arm R: deep red
-    C[14] = cv::Scalar(0, 128, 255);      // forearm R: orange-red
+    C[11] = cv::Scalar(0, 0, 255);        // clavicle R: red
+    C[12] = cv::Scalar(0, 64, 255);       // upper arm R: deep red
+    C[13] = cv::Scalar(0, 128, 255);      // forearm R: orange-red
     // (you commented-out R hand groups; they’ll be gid 0)
 
-    C[17] = cv::Scalar(0, 200, 0);        // R hip
-    C[18] = cv::Scalar(40, 220, 40);      // R knee
-    C[19] = cv::Scalar(80, 240, 80);      // R ankle
-    C[20] = cv::Scalar(120, 255, 120);    // R foot
+    C[14] = cv::Scalar(0, 200, 0);        // R hip
+    C[15] = cv::Scalar(40, 220, 40);      // R upper leg
+    C[16] = cv::Scalar(80, 240, 80);      // R lower leg
+    C[17] = cv::Scalar(120, 255, 120);    // R foot
 
     return C;
 }
@@ -278,7 +277,7 @@ static std::unordered_map<BoneKey,int,BoneKeyHash> makeGroupMap() {
     };
 
     int gid = 1;
-    // Group 0: trunk
+    // Group 1: trunk
     add(gid, K4ABT_JOINT_SPINE_CHEST, K4ABT_JOINT_SPINE_NAVEL);
     add(gid, K4ABT_JOINT_SPINE_NAVEL, K4ABT_JOINT_PELVIS);
     add(gid, K4ABT_JOINT_SPINE_CHEST, K4ABT_JOINT_NECK);
@@ -286,54 +285,65 @@ static std::unordered_map<BoneKey,int,BoneKeyHash> makeGroupMap() {
     add(gid, K4ABT_JOINT_SPINE_CHEST, K4ABT_JOINT_CLAVICLE_RIGHT);
     ++gid;
 
-    // Group 1: head/neck
+    // Group 2: neck
     add(gid, K4ABT_JOINT_NECK, K4ABT_JOINT_HEAD);
+    // todo fix this, this is supposed to be head
     add(gid, K4ABT_JOINT_HEAD, K4ABT_JOINT_NOSE);
     ++gid;
 
-    // Group 2: clavicle L
+    // Group 3: clavicle L
     add(gid, K4ABT_JOINT_CLAVICLE_LEFT, K4ABT_JOINT_SHOULDER_LEFT); ++gid;
 
-    // Group 3: upper arm L
+    // Group 4: upper arm L
     add(gid, K4ABT_JOINT_SHOULDER_LEFT, K4ABT_JOINT_ELBOW_LEFT); ++gid;
 
-    // Group 4: forearm L
+    // Group 5: forearm L
     add(gid, K4ABT_JOINT_ELBOW_LEFT, K4ABT_JOINT_WRIST_LEFT); ++gid;
 
-    // Group 5: hand L
+    // Group 0: hand L
     // add(gid, K4ABT_JOINT_WRIST_LEFT, K4ABT_JOINT_HAND_LEFT); ++gid;
 
-    // Group 6: fingertips/thumb L
+    // Group 0: fingertips/thumb L
     // add(gid, K4ABT_JOINT_HAND_LEFT,  K4ABT_JOINT_HANDTIP_LEFT);
     // add(gid, K4ABT_JOINT_WRIST_LEFT, K4ABT_JOINT_THUMB_LEFT);
     // ++gid;
 
-    // Group 7..10: left leg chain
+    // Group 6: left hip
     add(gid, K4ABT_JOINT_PELVIS,     K4ABT_JOINT_HIP_LEFT); ++gid;
+    // Group 7: left upper leg
     add(gid, K4ABT_JOINT_HIP_LEFT,   K4ABT_JOINT_KNEE_LEFT); ++gid;
+    // Group 8: left lower leg
     add(gid, K4ABT_JOINT_KNEE_LEFT,  K4ABT_JOINT_ANKLE_LEFT); ++gid;
+    // Group 9: left foot
     add(gid, K4ABT_JOINT_ANKLE_LEFT, K4ABT_JOINT_FOOT_LEFT); ++gid;
 
-    // Group 11: face lines
+    // Group 10: head lines
     add(gid, K4ABT_JOINT_NOSE,      K4ABT_JOINT_EYE_LEFT);
     add(gid, K4ABT_JOINT_EYE_LEFT,  K4ABT_JOINT_EAR_LEFT);
     add(gid, K4ABT_JOINT_NOSE,      K4ABT_JOINT_EYE_RIGHT);
     add(gid, K4ABT_JOINT_EYE_RIGHT, K4ABT_JOINT_EAR_RIGHT);
     ++gid;
 
-    // Group 12..16: right arm/hand
+    // Group 11: right clavicle
     add(gid, K4ABT_JOINT_CLAVICLE_RIGHT, K4ABT_JOINT_SHOULDER_RIGHT); ++gid;
+    // Group 12: right upper arm
     add(gid, K4ABT_JOINT_SHOULDER_RIGHT, K4ABT_JOINT_ELBOW_RIGHT); ++gid;
+    // Group 13: right forearm
     add(gid, K4ABT_JOINT_ELBOW_RIGHT,    K4ABT_JOINT_WRIST_RIGHT); ++gid;
+
+    // Group 0: hand R
     // add(gid, K4ABT_JOINT_WRIST_RIGHT,    K4ABT_JOINT_HAND_RIGHT); ++gid;
     // add(gid, K4ABT_JOINT_HAND_RIGHT,     K4ABT_JOINT_HANDTIP_RIGHT);
     // add(gid, K4ABT_JOINT_WRIST_RIGHT,    K4ABT_JOINT_THUMB_RIGHT);
     // ++gid;
 
-    // Group 17..20: right leg chain
+    // Group 14: right hip
     add(gid, K4ABT_JOINT_PELVIS,     K4ABT_JOINT_HIP_RIGHT); ++gid;
+    // Group 15: right upper leg
     add(gid, K4ABT_JOINT_HIP_RIGHT,  K4ABT_JOINT_KNEE_RIGHT); ++gid;
+    // Group 16: right lower leg
     add(gid, K4ABT_JOINT_KNEE_RIGHT, K4ABT_JOINT_ANKLE_RIGHT); ++gid;
+    // Group 17: right foot
     add(gid, K4ABT_JOINT_ANKLE_RIGHT,K4ABT_JOINT_FOOT_RIGHT); ++gid;
 
     return G;
