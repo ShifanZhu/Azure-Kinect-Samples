@@ -153,11 +153,11 @@ struct InputSettings
 };
 
 struct BoneLabel2DConfig {
-    float max_pixel_dist = 5.0f;  // ignore pixels farther than this (px) from any bone
+    float max_pixel_dist = 10.0f;  // ignore pixels farther than this (px) from any bone
     float z_weight       = 0.10f;  // weight for depth-consistency term (mm^2 -> px^2 scale)
     bool  use_z_check    = true;   // add Z penalty to break 2D overlaps
     bool  skip_low_conf  = true;   // ignore bones whose joints are below LOW confidence
-    int   stride         = 10;    // 10×10 ⇒ ~1/100 pixels
+    int   stride         = 3;    // 10×10 ⇒ ~1/100 pixels
     bool  fill_blocks    = true;  // replicate label into the stride block for display
 };
 // 2D point-to-segment squared distance, also returns t in [0,1]
@@ -287,8 +287,6 @@ static std::unordered_map<BoneKey,int,BoneKeyHash> makeGroupMap() {
 
     // Group 2: neck
     add(gid, K4ABT_JOINT_NECK, K4ABT_JOINT_HEAD);
-    // todo fix this, this is supposed to be head
-    add(gid, K4ABT_JOINT_HEAD, K4ABT_JOINT_NOSE);
     ++gid;
 
     // Group 3: clavicle L
@@ -322,6 +320,7 @@ static std::unordered_map<BoneKey,int,BoneKeyHash> makeGroupMap() {
     add(gid, K4ABT_JOINT_EYE_LEFT,  K4ABT_JOINT_EAR_LEFT);
     add(gid, K4ABT_JOINT_NOSE,      K4ABT_JOINT_EYE_RIGHT);
     add(gid, K4ABT_JOINT_EYE_RIGHT, K4ABT_JOINT_EAR_RIGHT);
+    add(gid, K4ABT_JOINT_HEAD, K4ABT_JOINT_NOSE);
     ++gid;
 
     // Group 11: right clavicle
@@ -505,6 +504,8 @@ static void PublishSparseClassCloudsUnified(const k4abt_frame_t bodyFrame,
                 if (score < bestScore) { bestScore = score; bestBone = (int)b; }
             }
             if (bestBone < 0) continue;
+            // Note: ignore bone index
+            bestBone = 1; // make it all spine
 
             int gid = boneIndexToGroupId((size_t)bestBone, g_boneList, G);
             if (!cfg.include_gid0 && gid == 0) continue;
